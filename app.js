@@ -307,6 +307,9 @@ const emptyHint = () => `<div class="empty"><p>Noch keine Lieblingsorte eingetra
 /* ---------- Karte: Straßenkarte (Leaflet) und Länder (jsVectorMap) ---------- */
 let lmap = null, cluster = null, lmapEl = null, meMarker = null, photoZoom = false, vmap = null;
 const darkMode = () => { const t = document.documentElement.dataset.theme; return t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); };
+/* Kartenbild von OpenStreetMap (frei nutzbar mit Quellenangabe). Im dunklen Modus per Filter abgedunkelt. */
+const tiles = () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19,
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende'});
 const probe = v => { const p = document.createElement('span'); p.style.color = `var(${v})`; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c; };
 function renderKarte() {
   const v = $('#v-karte');
@@ -332,8 +335,7 @@ function drawLeaflet() {
   if (lmap && lmapEl === el) { lmap.invalidateSize(); updateMarkers(false); return; }
   lmapEl = el;
   lmap = L.map(el, {zoomControl: true, worldCopyJump: true, tap: true}).setView([47.6, 14.1], 5);
-  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${darkMode() ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {maxZoom: 19, subdomains: 'abcd',
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>'}).addTo(lmap);
+  tiles().addTo(lmap); el.classList.toggle('darktiles', darkMode());
   cluster = L.markerClusterGroup({showCoverageOnHover: false, maxClusterRadius: 46, spiderfyOnMaxZoom: true,
     iconCreateFunction: c => L.divIcon({html: `<div class="cl">${c.getChildCount()}</div>`, className: '', iconSize: [42, 42]})});
   lmap.addLayer(cluster);
@@ -538,7 +540,7 @@ function showMini() {
   el.hidden = false; $('#miniHint').hidden = false;
   if (!mini) {
     mini = L.map(el, {zoomControl: true, attributionControl: false}).setView([S.draft.lat, S.draft.lng], 16);
-    L.tileLayer(`https://{s}.basemaps.cartocdn.com/${darkMode() ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {maxZoom: 19, subdomains: 'abcd'}).addTo(mini);
+    tiles().addTo(mini); el.classList.toggle('darktiles', darkMode());
     miniMarker = L.marker([S.draft.lat, S.draft.lng], {draggable: true, icon: L.divIcon({className: '', html: '<div class="mk"><i></i></div>', iconSize: [16, 16], iconAnchor: [8, 8]})}).addTo(mini);
     miniMarker.on('dragend', () => { const p = miniMarker.getLatLng(); S.draft.lat = p.lat; S.draft.lng = p.lng; });
   } else { mini.invalidateSize(); mini.setView([S.draft.lat, S.draft.lng], Math.max(mini.getZoom(), 15)); miniMarker.setLatLng([S.draft.lat, S.draft.lng]); }

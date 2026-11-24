@@ -1,6 +1,6 @@
 /* Hält die App startfähig, wenn gerade kein Netz da ist, und zeigt später Mitteilungen an.
    Online wird immer zuerst die neueste Version geladen, damit Änderungen sofort ankommen. */
-const CACHE = 'travel-shell-v1';
+const CACHE = 'travel-shell-v2';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', (e) => {
