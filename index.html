@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Travel</title>
+<meta name="description" content="Die Lieblingsorte der Familie DJNP.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Travel">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="gate" id="gate"><div class="brand"><img src="logo.png" alt="DJNP"><span class="ttl">Travel</span></div><p>Lade …</p></div>
+<div class="app" id="app" hidden>
+  <header class="top"><img src="logo.png" alt="DJNP Logo"><span class="ttl">Travel</span><span class="sync" id="sync" title="Verbunden"></span>
+    <button class="gear" data-act="settings" aria-label="Einstellungen"><svg class="i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button></header>
+  <main id="main">
+    <section class="view" id="v-karte"></section>
+    <section class="view" id="v-liste" hidden></section>
+    <section class="view" id="v-neu" hidden></section>
+    <section class="view" id="v-reisen" hidden></section>
+    <section class="view" id="v-rueckblick" hidden></section>
+    <section class="view" id="v-detail" hidden></section>
+    <section class="view" id="v-buch" hidden></section>
+  </main>
+  <nav id="nav">
+    <button data-act="go" data-v="karte"><svg class="i" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14m6-12v14"/></svg>Karte</button>
+    <button data-act="go" data-v="liste"><svg class="i" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Suche</button>
+    <button data-act="go" data-v="neu" class="plus" aria-label="Neuer Lieblingsort"><span><svg class="i" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+    <button data-act="go" data-v="reisen"><svg class="i" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></svg>Reisen</button>
+    <button data-act="go" data-v="rueckblick"><svg class="i" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M7 16v-5M12 16V5M17 16v-8"/></svg>Rückblick</button>
+  </nav>
+</div>
+<div class="sheet" id="sheet" hidden><div class="in" id="sheetIn"></div></div>
+<div class="zoom" id="zoom" hidden data-act="unzoom"><img alt="Foto groß"></div>
+<div class="toast" id="toast" role="status"></div>
+<div class="push" id="push" role="status" aria-live="polite"></div>
+<input type="file" id="addPhotos" accept="image/*" multiple hidden>
+<script src="config.js"></script>
+<script src="countries.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsvectormap/1.5.0/js/jsvectormap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsvectormap/1.5.0/maps/world.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
