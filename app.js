@@ -54,7 +54,7 @@ const I = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4Zm4 4h4"/>',
   gps: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
-  edit: '<path d="M4 20h4L19 9l-4-4L4 16Z"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16Z"/>', star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9Z"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   download: '<path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/>', print: '<path d="M7 9V4h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v6H7Z"/>'
 };
 const ic = (n, s = 20) => `<svg class="i" width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || ''}</svg>`;
@@ -67,6 +67,15 @@ const cName = c => (COUNTRIES[c] || [c || ''])[0];
 const whoAll = e => { const s = new Set(); e.visits.forEach(v => (v.who || []).forEach(k => s.add(k))); return [...PK, ...DOGS.map(d => d.k)].filter(k => s.has(k)); };
 const lastDate = e => e.visits.map(v => v.date).sort().pop() || '';
 const dogOk = e => ['willkommen', 'erlaubt', 'draussen'].includes(e.dog);
+/* Stammort: automatisch ab STAMM_AB Besuchen, sonst mit einem Tipp; e.stamm: null = automatisch, true = ja, false = nein */
+const STAMM_AB = 3;
+const STAMM = {restaurant: 'Stammlokal', bar: 'Stammbar', cafe: 'Stammcafé', heuriger: 'Stammheuriger', hotel: 'Stammhotel', fewo: 'Stammquartier', strand: 'Stammstrand'};
+const STAMM_GRP = {essen: 'Stammlokal', schlafen: 'Stammquartier'};
+const stammLabel = e => STAMM[e.cat] || STAMM_GRP[grp(e)] || 'Stammplatz';
+const stammFem = e => e.cat === 'bar';
+const unser = (e, cap) => (cap ? 'U' : 'u') + (stammFem(e) ? 'nsere' : 'nser');
+const isStamm = e => e.stamm === true || (e.stamm !== false && e.visits.length >= STAMM_AB);
+const stammNext = e => { const auto = e.visits.length >= STAMM_AB; return isStamm(e) ? (auto ? false : null) : (auto ? null : true); };
 const hasPos = e => typeof e.lat === 'number' && typeof e.lng === 'number';
 const placeQuery = e => [e.name, e.address || e.city, cName(e.country)].filter(Boolean).join(', ');
 const mapsUrl = e => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(placeQuery(e));
@@ -80,7 +89,7 @@ const countryOpts = sel => {
 };
 
 /* ---------- Zustand ---------- */
-const S = {me: null, places: [], trips: [], notif: null, view: 'karte', detail: null, f: {people: [], dog: false, group: '', trip: ''}, q: '',
+const S = {me: null, places: [], trips: [], notif: null, view: 'karte', detail: null, f: {people: [], dog: false, stamm: false, group: '', trip: ''}, q: '',
   draft: null, share: null, prevView: 'karte', buch: null, mapMode: 'strassen', urls: {}, near: null, sortNear: false, loaded: false};
 let sb = null, session = null, channel = null;
 
@@ -94,6 +103,7 @@ const fail = (what, err) => { if (window.console) console.error(what, err); toas
 const fromRow = r => ({id: r.id, name: r.name, cat: r.cat, catText: r.cat_text || '', catGroup: r.cat_group || '', city: r.city || '', country: r.country || '', address: r.address || '',
   lat: r.lat, lng: r.lng, price: r.price || 0, trip: r.trip_id || '', dog: r.dog || '', dogNote: r.dog_note || '', loves: r.loves || [], highlight: r.highlight || '',
   tip: r.tip || '', priv: r.priv || '', tel: r.tel || '', res: r.res || '', web: r.web || '', dishes: Array.isArray(r.dishes) ? r.dishes : [],
+  stamm: typeof r.stamm === 'boolean' ? r.stamm : null,
   createdBy: r.created_by || '', updatedBy: r.updated_by || '', updatedAt: r.updated_at || '', visits: [], photos: []});
 const toRow = e => ({name: e.name, cat: e.cat, cat_text: e.catText || null, cat_group: e.catGroup || null, city: e.city || null, country: e.country || null,
   address: e.address || null, lat: hasPos(e) ? e.lat : null, lng: hasPos(e) ? e.lng : null, price: e.price || 0, trip_id: e.trip || null, dog: e.dog || '',
@@ -281,14 +291,15 @@ function boot() {
 const matches = (e, q) => {
   if (!q) return true;
   const hay = norm([e.name, catLabel(e), e.city, e.address, cName(e.country), e.tip, e.priv, e.dogNote, e.highlight, (trip(e.trip) || {}).name,
-    ...e.dishes.map(d => d.n), ...e.visits.map(v => v.note), DOG[e.dog || ''][0], GROUPS[grp(e)]].join(' '));
+    ...e.dishes.map(d => d.n), ...e.visits.map(v => v.note), DOG[e.dog || ''][0], GROUPS[grp(e)], isStamm(e) ? stammLabel(e) + ' Stammort' : ''].join(' '));
   return norm(q).split(/\s+/).filter(Boolean).every(w => hay.includes(w));
 };
-const anyFilter = () => S.f.people.length || S.f.dog || S.f.group || S.f.trip;
+const anyFilter = () => S.f.people.length || S.f.dog || S.f.stamm || S.f.group || S.f.trip;
 const filtered = (useQ = false) => S.places.filter(e => {
   const f = S.f, w = whoAll(e);
   if (f.people.length && !f.people.some(k => w.includes(k))) return false;
   if (f.dog && !dogOk(e)) return false;
+  if (f.stamm && !isStamm(e)) return false;
   if (f.group && grp(e) !== f.group) return false;
   if (f.trip && e.trip !== f.trip) return false;
   return useQ ? matches(e, S.q) : true;
@@ -296,10 +307,11 @@ const filtered = (useQ = false) => S.places.filter(e => {
 const thumb = e => e.photos && e.photos[0] ? img(thumbOf(e.photos[0].path), 'thumb') : `<span class="thumb">${ic(grp(e), 26)}</span>`;
 const row = e => {
   const d = S.near && hasPos(e) ? dist(S.near.lat, S.near.lng, e.lat, e.lng) : null;
-  return `<button class="row" data-act="open" data-id="${esc(e.id)}">${thumb(e)}<span><span class="t">${esc(e.name)}</span><br><span class="m">${esc(catLabel(e))} · ${esc(e.city || cName(e.country))}${e.city ? ', ' + esc(cName(e.country)) : ''}</span><br><span class="m">${esc(fmt(lastDate(e)))}${e.visits.length > 1 ? ' · ' + e.visits.length + ' Besuche' : ''}</span></span><span class="r">${d !== null && S.sortNear ? `<span class="dist">${km(d)}</span>` : ''}${avs(whoAll(e).filter(k => PK.includes(k)))}${dogOk(e) ? `<span class="paw" title="${esc(DOG[e.dog][0])}">${ic('paw', 18)}</span>` : ''}</span></button>`;
+  return `<button class="row" data-act="open" data-id="${esc(e.id)}">${thumb(e)}<span><span class="t">${esc(e.name)}</span>${isStamm(e) ? ` <span class="st">${ic('star', 12)}${esc(stammLabel(e))}</span>` : ''}<br><span class="m">${esc(catLabel(e))} · ${esc(e.city || cName(e.country))}${e.city ? ', ' + esc(cName(e.country)) : ''}</span><br><span class="m">${esc(fmt(lastDate(e)))}${e.visits.length > 1 ? ' · ' + e.visits.length + ' Besuche' : ''}</span></span><span class="r">${d !== null && S.sortNear ? `<span class="dist">${km(d)}</span>` : ''}${avs(whoAll(e).filter(k => PK.includes(k)))}${dogOk(e) ? `<span class="paw" title="${esc(DOG[e.dog][0])}">${ic('paw', 18)}</span>` : ''}</span></button>`;
 };
 const filterChips = () => `<div class="chips">${PEOPLE.map(p => `<button class="chip ${S.f.people.includes(p.k) ? 'on' : ''}" data-act="fperson" data-k="${p.k}" aria-pressed="${S.f.people.includes(p.k)}">${av(p.k)}${esc(p.n)}</button>`).join('')}
-  <button class="chip ${S.f.dog ? 'on' : ''}" data-act="fdog" aria-pressed="${S.f.dog}"><span class="av dog">${ic('paw', 14)}</span>Hundetauglich</button></div>
+  <button class="chip ${S.f.dog ? 'on' : ''}" data-act="fdog" aria-pressed="${S.f.dog}"><span class="av dog">${ic('paw', 14)}</span>Hundetauglich</button>
+  <button class="chip ${S.f.stamm ? 'on' : ''}" data-act="fstamm" aria-pressed="${S.f.stamm}"><span class="av star">${ic('star', 14)}</span>Stammorte</button></div>
   <div class="chips"><button class="chip plain ${!S.f.group ? 'on' : ''}" data-act="fgroup" data-g="">Alles</button>${Object.entries(GROUPS).map(([g, l]) => `<button class="chip plain ${S.f.group === g ? 'on' : ''}" data-act="fgroup" data-g="${g}">${ic(g, 16)}${esc(l)}</button>`).join('')}</div>
   ${S.f.trip ? `<div class="chips"><button class="chip on" data-act="ftrip">${ic('x', 16)}Reise: ${esc((trip(S.f.trip) || {}).name || '')}</button></div>` : ''}`;
 const emptyHint = () => `<div class="empty"><p>Noch keine Lieblingsorte eingetragen.</p><div class="btns" style="max-width:360px;margin:0 auto"><button class="btn main" data-act="go" data-v="neu">${ic('plus', 18)}Ersten Ort eintragen</button><button class="btn" data-act="go" data-v="reisen">Alte Reise nachtragen</button></div></div>`;
@@ -353,9 +365,11 @@ async function updateMarkers(fit) {
   list.forEach(e => {
     const who = whoAll(e).filter(k => PK.includes(k)).join('');
     const ph = photoZoom && e.photos[0] && S.urls[thumbOf(e.photos[0].path)];
-    const html = ph ? `<div class="mk"><img src="${esc(ph.url)}" alt=""><b>${esc(who)}</b></div>` : `<div class="mk"><i></i>${who ? `<b>${esc(who)}</b>` : ''}</div>`;
-    const m = L.marker([e.lat, e.lng], {icon: L.divIcon({className: '', html, iconSize: ph ? [46, 46] : [16, 16], iconAnchor: ph ? [23, 23] : [8, 8]}), title: e.name});
-    m.bindPopup(() => `<div class="pop">${thumb(e)}<div><b>${esc(e.name)}</b><small>${esc(catLabel(e))} · ${esc(e.city)}</small><br><button data-act="open" data-id="${esc(e.id)}">Ansehen</button></div></div>`);
+    const st = isStamm(e);
+    const html = ph ? `<div class="mk${st ? ' st' : ''}"><img src="${esc(ph.url)}" alt="">${st ? `<s>${ic('star', 12)}</s>` : ''}<b>${esc(who)}</b></div>` : `<div class="mk${st ? ' st' : ''}"><i>${st ? ic('star', 12) : ''}</i>${who ? `<b>${esc(who)}</b>` : ''}</div>`;
+    const sz = ph ? 46 : st ? 22 : 16;
+    const m = L.marker([e.lat, e.lng], {icon: L.divIcon({className: '', html, iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2]}), title: e.name + (st ? ' – ' + stammLabel(e) : ''), zIndexOffset: st ? 500 : 0});
+    m.bindPopup(() => `<div class="pop">${thumb(e)}<div><b>${esc(e.name)}</b><small>${esc(catLabel(e))} · ${esc(e.city)}${isStamm(e) ? ' · ' + esc(stammLabel(e)) : ''}</small><br><button data-act="open" data-id="${esc(e.id)}">Ansehen</button></div></div>`);
     cluster.addLayer(m);
   });
   if (fit) {
@@ -441,9 +455,10 @@ function renderDetail() {
     <div class="gallery" tabindex="0" aria-label="Fotos">${gal}</div>
     <div class="btns" style="margin:-4px 0 12px"><button class="btn small" data-act="addphotos">${ic('camera', 16)}Fotos hinzufügen</button></div>
     <h1 style="font-size:30px">${esc(e.name)}</h1>
-    <div class="meta"><span class="tag">${esc(catLabel(e))}</span><span class="tag">${esc([e.city, cName(e.country)].filter(Boolean).join(', '))}</span>${e.price ? `<span class="tag">${'€'.repeat(e.price)}</span>` : ''}${e.trip && trip(e.trip) ? `<span class="tag">${esc(trip(e.trip).name)}</span>` : ''}</div>
+    <div class="meta">${isStamm(e) ? `<span class="tag stamm">${ic('star', 14)}${unser(e, true)} ${esc(stammLabel(e))}</span>` : ''}<span class="tag">${esc(catLabel(e))}</span><span class="tag">${esc([e.city, cName(e.country)].filter(Boolean).join(', '))}</span>${e.price ? `<span class="tag">${'€'.repeat(e.price)}</span>` : ''}${e.trip && trip(e.trip) ? `<span class="tag">${esc(trip(e.trip).name)}</span>` : ''}</div>
     ${e.address ? `<p class="addr" style="margin:-6px 0 12px">${ic('pin', 16)} ${esc(e.address)}</p>` : ''}
     <div class="loves"><span class="lbl" style="margin:0 4px 0 0">Lieben wir</span>${PEOPLE.map(p => `<button data-act="love" data-k="${p.k}" aria-pressed="${e.loves.includes(p.k)}" aria-label="${esc(p.n)} liebt es">${av(p.k, e.loves.includes(p.k) ? '' : 'off')}</button>`).join('')}</div>
+    <div class="stammrow"><button class="btn small ${isStamm(e) ? 'acc' : ''}" data-act="stamm" aria-pressed="${isStamm(e)}">${ic('star', 16)}${isStamm(e) ? `${unser(e, true)} ${esc(stammLabel(e))}` : `${stammFem(e) ? 'Zur' : 'Zum'} ${esc(stammLabel(e))} machen`}</button><span class="hint">${isStamm(e) && e.stamm === null ? `Automatisch – ${e.visits.length} Besuche` : isStamm(e) ? 'Nochmal tippen zum Entfernen' : `Automatisch ab ${STAMM_AB} Besuchen`}</span></div>
     ${e.highlight ? `<div class="box"><h4>${ic('event', 18)}Highlight</h4><p>${esc(e.highlight)}</p></div>` : ''}
     ${e.tel || e.res || e.web ? `<div class="btns" style="margin-bottom:8px">${e.tel ? `<a class="btn main" href="tel:${esc(e.tel.replace(/[^\d+]/g, ''))}">${ic('kontakt', 18)}Anrufen</a>` : ''}${e.res ? `<a class="btn" href="${esc(asUrl(e.res))}" target="_blank" rel="noopener">${ic('cal', 18)}Reservieren</a>` : ''}${e.web ? `<a class="btn" href="${esc(asUrl(e.web))}" target="_blank" rel="noopener">${ic('globe', 18)}Website</a>` : ''}</div>${e.tel ? `<p class="num">${esc(e.tel)}</p>` : ''}` : ''}
     <div class="btns" style="margin-bottom:14px"><a class="btn" href="${esc(routeUrl(e))}" target="_blank" rel="noopener">${ic('pin', 18)}Route</a><button class="btn acc" data-act="share" data-id="${esc(e.id)}">${ic('share', 18)}Teilen</button></div>
@@ -672,7 +687,7 @@ function renderBuch() {
   let pno = 1;
   const page = e => { pno++; const notes = vis(e).filter(v => v.note).map(v => `„${esc(v.note)}“${v.by && person(v.by) ? ' – ' + esc(person(v.by).n) : ''}`);
     return `<article class="page"><div class="pimg">${e.photos[0] ? img(e.photos[0].path) : ic(grp(e), 56)}</div>
-      <h2>${esc(e.name)}</h2><p class="pm">${esc(catLabel(e))} · ${esc(e.city)} · ${vis(e).map(v => esc(fmt(v.date))).join(', ')}</p>
+      <h2>${esc(e.name)}</h2><p class="pm">${esc(catLabel(e))}${isStamm(e) ? ' · ' + esc(stammLabel(e)) : ''} · ${esc(e.city)} · ${vis(e).map(v => esc(fmt(v.date))).join(', ')}</p>
       <p>${avs(whoAll(e))}</p>
       ${e.highlight ? `<h4>Highlight</h4><p>${esc(e.highlight)}</p>` : ''}
       ${e.dishes.length ? `<h4>Unbedingt probieren</h4><p>${e.dishes.map(x => esc(x.n)).join(' · ')}</p>` : ''}
@@ -709,9 +724,11 @@ function renderRueckblick() {
     ${!E.length ? emptyHint() : `
     ${mem ? `<button class="memory" data-act="open" data-id="${esc(mem.e.id)}"><small>${yrs === 1 ? 'Vor einem Jahr' : `Vor ${yrs} Jahren`} · ${esc(fmt(mem.v.date))}</small><div class="ttl" style="font-size:22px;margin:4px 0">${esc(mem.e.name)}, ${esc(mem.e.city)}</div>${mem.v.note ? `<span>„${esc(mem.v.note)}“</span>` : ''}</button>` : ''}
     <div class="stats"><div class="stat"><div class="n">${Object.keys(countries).length}</div><div class="l">Länder</div></div><div class="stat"><div class="n">${E.length}</div><div class="l">Lieblingsorte</div></div><div class="stat"><div class="n">${E.reduce((s, e) => s + e.dishes.length, 0)}</div><div class="l">Spezialitäten</div></div></div>
+    ${E.some(isStamm) ? `<h3>Unsere Stammorte</h3>${E.filter(isStamm).sort((a, b) => b.visits.length - a.visits.length).map(row).join('')}<div style="height:18px"></div>` : ''}
     <h3>Wer war wo dabei</h3>${per.map(([p, n]) => `<div class="bar"><span>${av(p.k)} ${esc(p.n)}</span><i style="width:${Math.round(n / maxP * 100)}%;background:${p.c}"></i><span>${n}</span></div>`).join('')}
     <h3 style="margin-top:18px">Länder</h3>${Object.entries(countries).sort((a, b) => b[1] - a[1]).map(([c, n]) => `<div class="bar"><span>${esc(cName(c))}</span><i style="width:${Math.round(n / maxC * 100)}%"></i><span>${n}</span></div>`).join('')}
     <h3 style="margin-top:18px">Die meistgeliebten Spezialitäten</h3>${dishes.map(x => `<div class="dish"><span>${esc(x.d.n)}<br><span class="hint">${esc(x.e.name)}, ${esc(x.e.city)}</span></span>${avs(x.d.w || [])}</div>`).join('') || '<p class="empty">Noch keine Spezialitäten eingetragen.</p>'}`}`;
+  hydrate($('#v-rueckblick'));
 }
 
 /* ---------- Teilen ---------- */
@@ -719,7 +736,7 @@ function shareText() {
   const sh = S.share; const from = sh.from === 'uns' ? 'uns' : (person(sh.from) || {n: 'uns'}).n;
   const one = (e, short) => {
     const L = [short ? `• ${e.name}, ${e.city}` : `🧡 Tipp von ${from}: ${e.name}, ${e.city}`];
-    L.push(`${catLabel(e)}${e.price ? ' · ' + '€'.repeat(e.price) : ''}`);
+    L.push(`${catLabel(e)}${e.price ? ' · ' + '€'.repeat(e.price) : ''}${isStamm(e) ? ` · ${unser(e, true)} ${stammLabel(e)}` : ''}`);
     if (e.highlight) L.push(`🎵 ${e.highlight}`);
     if (sh.dishes && e.dishes.length) L.push(`😋 Unbedingt probieren: ${e.dishes.map(d => d.n).join(', ')}`);
     if (sh.tip && e.tip) L.push(`💡 Gut zu wissen: ${e.tip}`);
@@ -806,12 +823,14 @@ document.addEventListener('click', async ev => {
   else if (a === 'back') go(S.prevView || 'karte');
   else if (a === 'fperson') { const k = b.dataset.k, p = S.f.people; S.f.people = p.includes(k) ? p.filter(x => x !== k) : [...p, k]; rerenderFilters(); }
   else if (a === 'fdog') { S.f.dog = !S.f.dog; rerenderFilters(); }
+  else if (a === 'fstamm') { S.f.stamm = !S.f.stamm; rerenderFilters(); }
   else if (a === 'fgroup') { S.f.group = b.dataset.g; rerenderFilters(); }
   else if (a === 'ftrip') { S.f.trip = ''; rerenderFilters(); }
   else if (a === 'mapmode') { S.mapMode = b.dataset.m; renderKarte(); }
   else if (a === 'locate') locate();
   else if (a === 'vfocus' && vmap) { try { if (b.dataset.w === 'welt') vmap.setFocus({coords: [25, 10], scale: 1, animate: true}); else vmap.setFocus({regions: [...new Set(S.places.map(x => x.country))].filter(Boolean), animate: true}); } catch (x) {} }
   else if (a === 'sortnear') { if (S.sortNear) { S.sortNear = false; renderListe(); } else { try { toast('Suche deinen Standort …'); S.near = await getPos(); S.sortNear = true; renderListe(); } catch (x) { toast('Standort nicht verfügbar. Bitte erlaube den Zugriff auf den Standort.', 4000); } } }
+  else if (a === 'stamm' && e) { const will = !isStamm(e); updatePlace(e, {stamm: stammNext(e)}, will ? `Gemerkt: ${unser(e)} ${stammLabel(e)}` : `${stammFem(e) ? 'Keine' : 'Kein'} ${stammLabel(e)} mehr`); }
   else if (a === 'love' && e) { const k = b.dataset.k; updatePlace(e, {loves: e.loves.includes(k) ? e.loves.filter(x => x !== k) : [...e.loves, k]}); }
   else if (a === 'tog') { b.classList.toggle('on'); b.setAttribute('aria-pressed', b.classList.contains('on')); }
   else if (a === 'edit') go('neu', {edit: b.dataset.id});
@@ -821,7 +840,7 @@ document.addEventListener('click', async ev => {
   else if (a === 'closeSheet') $('#sheet').hidden = true;
   else if (a === 'nativeShare') { try { await navigator.share({text: shareText()}); } catch (x) {} }
   else if (a === 'copy') { const txt = shareText(); try { await navigator.clipboard.writeText(txt); toast('Text kopiert'); } catch (x) { toast('Kopieren ging nicht – bitte den Text markieren.'); } }
-  else if (a === 'tripList') { S.f = {people: [], dog: false, group: '', trip: b.dataset.id}; S.q = ''; go('liste'); }
+  else if (a === 'tripList') { S.f = {people: [], dog: false, stamm: false, group: '', trip: b.dataset.id}; S.q = ''; go('liste'); }
   else if (a === 'tripAdd') go('neu', {trip: b.dataset.id});
   else if (a === 'book') { S.buch = b.dataset.id; go('buch'); }
   else if (a === 'print') printBook();
@@ -874,7 +893,7 @@ document.addEventListener('submit', async ev => {
   else if (id === 'visitForm') {
     const e = byId(S.detail); const who = picked('#vwho'); const er = $('#verr');
     if (!who.length) { er.textContent = 'Wähle aus, wer dabei war.'; er.hidden = false; return; }
-    try { const r = await sb.from('travel_visits').insert({id: uid(), place_id: e.id, date: $('#vd').value || today(), who, note: $('#vn').value.trim() || null, by: S.me}); if (r.error) throw r.error; toast('Besuch gespeichert'); await refresh(); }
+    try { const r = await sb.from('travel_visits').insert({id: uid(), place_id: e.id, date: $('#vd').value || today(), who, note: $('#vn').value.trim() || null, by: S.me}); if (r.error) throw r.error; toast(e.stamm == null && e.visits.length + 1 === STAMM_AB ? `${STAMM_AB}. Besuch – ab jetzt ${stammFem(e) ? 'eure' : 'euer'} ${stammLabel(e)}!` : 'Besuch gespeichert', 3600); await refresh(); }
     catch (x) { fail('Speichern', x); }
   } else if (id === 'tripForm') {
     const n = $('#tName').value.trim(), fr = $('#tFrom').value, to = $('#tTo').value, er = $('#tErr');

@@ -43,6 +43,8 @@ create table if not exists public.travel_places (
   updated_by  text
 );
 create index if not exists travel_places_trip_idx on public.travel_places (trip_id);
+-- Stammort (Stammlokal, Stammhotel …): null = automatisch ab 3 Besuchen, true = von Hand ja, false = von Hand nein
+alter table public.travel_places add column if not exists stamm boolean;
 
 create table if not exists public.travel_visits (
   id          text primary key,
