@@ -27,6 +27,8 @@ const PEOPLE = [{k: 'D', n: 'Dagmar', c: '#D45C84'}, {k: 'J', n: 'Jürgen', c: '
 const DOGS = [{k: 'Ivie', n: 'Ivie'}, {k: 'Frida', n: 'Frida'}];
 const PK = PEOPLE.map(p => p.k);
 const GROUPS = {essen: 'Essen & Trinken', schlafen: 'Schlafen', erleben: 'Erleben', event: 'Events', kontakt: 'Kontakte'};
+const GSHORT = {essen: 'Essen', schlafen: 'Schlafen', erleben: 'Erleben', event: 'Events', kontakt: 'Kontakte'};
+const emptyF = () => ({people: [], dog: false, stamm: false, group: '', trip: '', country: ''});
 const CATS = {restaurant: ['Restaurant', 'essen'], bar: ['Bar', 'essen'], cafe: ['Café', 'essen'], heuriger: ['Heuriger / Weinbar', 'essen'],
   hotel: ['Hotel', 'schlafen'], fewo: ['Ferienwohnung', 'schlafen'], strand: ['Strand', 'erleben'], aussicht: ['Aussicht', 'erleben'],
   wanderung: ['Wanderung', 'erleben'], sehenswert: ['Sehenswürdigkeit', 'erleben'], konzert: ['Konzert', 'event'], fussball: ['Fußball', 'event'], kontakt: ['Guter Kontakt', 'kontakt']};
@@ -54,7 +56,7 @@ const I = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4Zm4 4h4"/>',
   gps: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
-  edit: '<path d="M4 20h4L19 9l-4-4L4 16Z"/>', star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9Z"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16Z"/>', all: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>', star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9Z"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   download: '<path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/>', print: '<path d="M7 9V4h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v6H7Z"/>'
 };
 const ic = (n, s = 20) => `<svg class="i" width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || ''}</svg>`;
@@ -64,6 +66,7 @@ const avs = list => `<span class="avs">${list.map(k => av(k)).join('')}</span>`;
 const grp = e => e.cat === 'custom' ? (e.catGroup || 'erleben') : (CATS[e.cat] || ['', 'erleben'])[1];
 const catLabel = e => e.cat === 'custom' ? (e.catText || 'Ort') : (CATS[e.cat] || ['Ort'])[0];
 const cName = c => (COUNTRIES[c] || [c || ''])[0];
+const flag = c => /^[A-Z]{2}$/.test(c || '') ? String.fromCodePoint(...[...c].map(x => 127397 + x.charCodeAt(0))) : '';
 const whoAll = e => { const s = new Set(); e.visits.forEach(v => (v.who || []).forEach(k => s.add(k))); return [...PK, ...DOGS.map(d => d.k)].filter(k => s.has(k)); };
 const lastDate = e => e.visits.map(v => v.date).sort().pop() || '';
 const dogOk = e => ['willkommen', 'erlaubt', 'draussen'].includes(e.dog);
@@ -89,7 +92,7 @@ const countryOpts = sel => {
 };
 
 /* ---------- Zustand ---------- */
-const S = {me: null, places: [], trips: [], notif: null, view: 'karte', detail: null, f: {people: [], dog: false, stamm: false, group: '', trip: ''}, q: '',
+const S = {me: null, places: [], trips: [], notif: null, view: 'karte', detail: null, f: emptyF(), q: '',
   draft: null, share: null, prevView: 'karte', buch: null, mapMode: 'strassen', urls: {}, near: null, sortNear: false, loaded: false};
 let sb = null, session = null, channel = null;
 
@@ -294,7 +297,7 @@ const matches = (e, q) => {
     ...e.dishes.map(d => d.n), ...e.visits.map(v => v.note), DOG[e.dog || ''][0], GROUPS[grp(e)], isStamm(e) ? stammLabel(e) + ' Stammort' : ''].join(' '));
   return norm(q).split(/\s+/).filter(Boolean).every(w => hay.includes(w));
 };
-const anyFilter = () => S.f.people.length || S.f.dog || S.f.stamm || S.f.group || S.f.trip;
+const anyFilter = () => S.f.people.length || S.f.dog || S.f.stamm || S.f.group || S.f.trip || S.f.country;
 const filtered = (useQ = false) => S.places.filter(e => {
   const f = S.f, w = whoAll(e);
   if (f.people.length && !f.people.some(k => w.includes(k))) return false;
@@ -302,6 +305,7 @@ const filtered = (useQ = false) => S.places.filter(e => {
   if (f.stamm && !isStamm(e)) return false;
   if (f.group && grp(e) !== f.group) return false;
   if (f.trip && e.trip !== f.trip) return false;
+  if (f.country && e.country !== f.country) return false;
   return useQ ? matches(e, S.q) : true;
 }).sort((a, b) => lastDate(b).localeCompare(lastDate(a)));
 const thumb = e => e.photos && e.photos[0] ? img(thumbOf(e.photos[0].path), 'thumb') : `<span class="thumb">${ic(grp(e), 26)}</span>`;
@@ -309,11 +313,16 @@ const row = e => {
   const d = S.near && hasPos(e) ? dist(S.near.lat, S.near.lng, e.lat, e.lng) : null;
   return `<button class="row" data-act="open" data-id="${esc(e.id)}">${thumb(e)}<span><span class="t">${esc(e.name)}</span>${isStamm(e) ? ` <span class="st">${ic('star', 12)}${esc(stammLabel(e))}</span>` : ''}<br><span class="m">${esc(catLabel(e))} · ${esc(e.city || cName(e.country))}${e.city ? ', ' + esc(cName(e.country)) : ''}</span><br><span class="m">${esc(fmt(lastDate(e)))}${e.visits.length > 1 ? ' · ' + e.visits.length + ' Besuche' : ''}</span></span><span class="r">${d !== null && S.sortNear ? `<span class="dist">${km(d)}</span>` : ''}${avs(whoAll(e).filter(k => PK.includes(k)))}${dogOk(e) ? `<span class="paw" title="${esc(DOG[e.dog][0])}">${ic('paw', 18)}</span>` : ''}</span></button>`;
 };
-const filterChips = () => `<div class="chips">${PEOPLE.map(p => `<button class="chip ${S.f.people.includes(p.k) ? 'on' : ''}" data-act="fperson" data-k="${p.k}" aria-pressed="${S.f.people.includes(p.k)}">${av(p.k)}${esc(p.n)}</button>`).join('')}
-  <button class="chip ${S.f.dog ? 'on' : ''}" data-act="fdog" aria-pressed="${S.f.dog}"><span class="av dog">${ic('paw', 14)}</span>Hundetauglich</button>
-  <button class="chip ${S.f.stamm ? 'on' : ''}" data-act="fstamm" aria-pressed="${S.f.stamm}"><span class="av star">${ic('star', 14)}</span>Stammorte</button></div>
-  <div class="chips"><button class="chip plain ${!S.f.group ? 'on' : ''}" data-act="fgroup" data-g="">Alles</button>${Object.entries(GROUPS).map(([g, l]) => `<button class="chip plain ${S.f.group === g ? 'on' : ''}" data-act="fgroup" data-g="${g}">${ic(g, 16)}${esc(l)}</button>`).join('')}</div>
-  ${S.f.trip ? `<div class="chips"><button class="chip on" data-act="ftrip">${ic('x', 16)}Reise: ${esc((trip(S.f.trip) || {}).name || '')}</button></div>` : ''}`;
+const filterChips = () => {
+  const f = S.f, t = f.trip && trip(f.trip);
+  const active = [t ? `<button class="chip on" data-act="ftrip">${ic('x', 16)}Reise: ${esc(t.name)}</button>` : '',
+    f.country ? `<button class="chip on" data-act="fcountryoff">${ic('x', 16)}${flag(f.country)} ${esc(cName(f.country))}</button>` : ''].join('');
+  return `<div class="fgrid" role="group" aria-label="Wer war dabei">${PEOPLE.map(p => `<button class="ft ${f.people.includes(p.k) ? 'on' : ''}" data-act="fperson" data-k="${p.k}" aria-pressed="${f.people.includes(p.k)}">${av(p.k)}<span>${esc(p.n)}</span></button>`).join('')}
+    <button class="ft ${f.dog ? 'on' : ''}" data-act="fdog" aria-pressed="${f.dog}" aria-label="Hundetauglich"><span class="av dog">${ic('paw', 14)}</span><span>Hund</span></button>
+    <button class="ft ${f.stamm ? 'on' : ''}" data-act="fstamm" aria-pressed="${f.stamm}" aria-label="Stammorte"><span class="av star">${ic('star', 14)}</span><span>Stamm</span></button></div>
+  <div class="fgrid" role="group" aria-label="Bereich"><button class="ft ${!f.group ? 'on' : ''}" data-act="fgroup" data-g="" aria-pressed="${!f.group}">${ic('all', 22)}<span>Alles</span></button>${Object.entries(GROUPS).map(([g, l]) => `<button class="ft ${f.group === g ? 'on' : ''}" data-act="fgroup" data-g="${g}" aria-pressed="${f.group === g}" aria-label="${esc(l)}">${ic(g, 22)}<span>${esc(GSHORT[g])}</span></button>`).join('')}</div>
+  ${active ? `<div class="chips wrap">${active}</div>` : ''}`;
+};
 const emptyHint = () => `<div class="empty"><p>Noch keine Lieblingsorte eingetragen.</p><div class="btns" style="max-width:360px;margin:0 auto"><button class="btn main" data-act="go" data-v="neu">${ic('plus', 18)}Ersten Ort eintragen</button><button class="btn" data-act="go" data-v="reisen">Alte Reise nachtragen</button></div></div>`;
 
 /* ---------- Karte: Straßenkarte (Leaflet) und Länder (jsVectorMap) ---------- */
@@ -323,6 +332,17 @@ const darkMode = () => { const t = document.documentElement.dataset.theme; retur
 const tiles = () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19,
   attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende'});
 const probe = v => { const p = document.createElement('span'); p.style.color = `var(${v})`; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c; };
+const statBtn = (n, label, k) => `<button class="stat" data-act="stat" data-k="${k}"><div class="n">${n}</div><div class="l">${esc(label)}${ic('back', 14)}</div></button>`;
+function openCountries() {
+  const cnt = {}; S.places.forEach(e => { if (e.country) cnt[e.country] = (cnt[e.country] || 0) + 1; });
+  const list = Object.entries(cnt).sort((a, b) => b[1] - a[1] || cName(a[0]).localeCompare(cName(b[0]), 'de'));
+  $('#sheetIn').innerHTML = `<div class="toprow"><h2 style="font-size:22px">${list.length} ${list.length === 1 ? 'Land' : 'Länder'}</h2><button class="back" data-act="closeSheet" aria-label="Schließen">${ic('x', 22)}</button></div>
+    <p class="hint" style="margin:2px 0 8px">Tippe auf ein Land, um seine Lieblingsorte zu sehen.</p>
+    ${list.map(([c, n]) => `<button class="crow" data-act="fcountry" data-c="${esc(c)}"><span class="fl" aria-hidden="true">${flag(c)}</span><span>${esc(cName(c))}</span><b>${n}</b>${ic('back', 16)}</button>`).join('')}
+    <button class="btn" style="width:100%;margin-top:14px" data-act="showLaender">${ic('globe', 18)}Auf der Weltkarte zeigen</button>`;
+  $('#sheet').hidden = false;
+}
+const showList = f => { S.f = {...emptyF(), ...f}; S.q = ''; S.sortNear = false; $('#sheet').hidden = true; go('liste'); };
 function renderKarte() {
   const v = $('#v-karte');
   if (v.dataset.mode !== S.mapMode) {
@@ -330,14 +350,13 @@ function renderKarte() {
     if (vmap) { try { vmap.destroy(); } catch (e) {} vmap = null; }
     v.dataset.mode = S.mapMode;
     v.innerHTML = `<div id="kf"></div>
-      <div class="maptabs"><button class="chip plain ${S.mapMode === 'strassen' ? 'on' : ''}" data-act="mapmode" data-m="strassen">${ic('pin', 16)}Straßenkarte</button><button class="chip plain ${S.mapMode === 'laender' ? 'on' : ''}" data-act="mapmode" data-m="laender">${ic('globe', 16)}Länder</button></div>
-      <div class="mapwrap" style="height:${S.mapMode === 'strassen' ? 380 : 330}px">${S.mapMode === 'strassen' ? `<div id="lmap" role="application" aria-label="Straßenkarte mit unseren Lieblingsorten"></div><button class="locate" data-act="locate" aria-label="Mein Standort">${ic('gps', 22)}</button>` : '<div id="vmap" role="img" aria-label="Weltkarte mit den Ländern, in denen wir waren"></div><div class="maptools"><button data-act="vfocus" data-w="alle">Unsere Länder</button><button data-act="vfocus" data-w="welt">Welt</button></div>'}</div>
+      <div class="mapwrap" style="height:${S.mapMode === 'strassen' ? 380 : 330}px"><div class="mapmode" role="group" aria-label="Kartenart"><button class="${S.mapMode === 'strassen' ? 'on' : ''}" data-act="mapmode" data-m="strassen" aria-pressed="${S.mapMode === 'strassen'}">${ic('pin', 16)}Karte</button><button class="${S.mapMode === 'laender' ? 'on' : ''}" data-act="mapmode" data-m="laender" aria-pressed="${S.mapMode === 'laender'}">${ic('globe', 16)}Länder</button></div>${S.mapMode === 'strassen' ? `<div id="lmap" role="application" aria-label="Straßenkarte mit unseren Lieblingsorten"></div><button class="locate" data-act="locate" aria-label="Mein Standort">${ic('gps', 22)}</button>` : '<div id="vmap" role="img" aria-label="Weltkarte mit den Ländern, in denen wir waren"></div><div class="maptools"><button data-act="vfocus" data-w="alle">Unsere Länder</button><button data-act="vfocus" data-w="welt">Welt</button></div>'}</div>
       <p class="legend">${S.mapMode === 'strassen' ? '<span>Zahl = mehrere Orte, reinzoomen teilt sie auf</span><span>Buchstaben = wer dabei war</span>' : '<span><b style="background:var(--visited)"></b>Hier waren wir</span>'}</p>
       <div id="kstats"></div><div id="inview"></div>`;
   }
   $('#kf').innerHTML = filterChips();
   const countries = new Set(S.places.map(e => e.country).filter(Boolean)).size;
-  $('#kstats').innerHTML = `<div class="stats"><div class="stat"><div class="n">${countries}</div><div class="l">Länder</div></div><div class="stat"><div class="n">${S.places.length}</div><div class="l">Lieblingsorte</div></div><div class="stat"><div class="n">${S.places.filter(e => grp(e) === 'event').length}</div><div class="l">Konzerte &amp; Spiele</div></div></div>`;
+  $('#kstats').innerHTML = `<div class="stats">${statBtn(countries, 'Länder', 'laender')}${statBtn(S.places.length, 'Lieblingsorte', 'orte')}${statBtn(S.places.filter(e => grp(e) === 'event').length, 'Konzerte & Spiele', 'events')}</div>`;
   if (S.mapMode === 'strassen') requestAnimationFrame(drawLeaflet);
   else { requestAnimationFrame(drawVmap); renderInView(); }
 }
@@ -723,11 +742,11 @@ function renderRueckblick() {
   $('#v-rueckblick').innerHTML = `<h1 style="font-size:28px;margin-bottom:12px">Rückblick</h1>
     ${!E.length ? emptyHint() : `
     ${mem ? `<button class="memory" data-act="open" data-id="${esc(mem.e.id)}"><small>${yrs === 1 ? 'Vor einem Jahr' : `Vor ${yrs} Jahren`} · ${esc(fmt(mem.v.date))}</small><div class="ttl" style="font-size:22px;margin:4px 0">${esc(mem.e.name)}, ${esc(mem.e.city)}</div>${mem.v.note ? `<span>„${esc(mem.v.note)}“</span>` : ''}</button>` : ''}
-    <div class="stats"><div class="stat"><div class="n">${Object.keys(countries).length}</div><div class="l">Länder</div></div><div class="stat"><div class="n">${E.length}</div><div class="l">Lieblingsorte</div></div><div class="stat"><div class="n">${E.reduce((s, e) => s + e.dishes.length, 0)}</div><div class="l">Spezialitäten</div></div></div>
+    <div class="stats">${statBtn(Object.keys(countries).length, 'Länder', 'laender')}${statBtn(E.length, 'Lieblingsorte', 'orte')}${statBtn(E.reduce((s, e) => s + e.dishes.length, 0), 'Spezialitäten', 'dishes')}</div>
     ${E.some(isStamm) ? `<h3>Unsere Stammorte</h3>${E.filter(isStamm).sort((a, b) => b.visits.length - a.visits.length).map(row).join('')}<div style="height:18px"></div>` : ''}
-    <h3>Wer war wo dabei</h3>${per.map(([p, n]) => `<div class="bar"><span>${av(p.k)} ${esc(p.n)}</span><i style="width:${Math.round(n / maxP * 100)}%;background:${p.c}"></i><span>${n}</span></div>`).join('')}
-    <h3 style="margin-top:18px">Länder</h3>${Object.entries(countries).sort((a, b) => b[1] - a[1]).map(([c, n]) => `<div class="bar"><span>${esc(cName(c))}</span><i style="width:${Math.round(n / maxC * 100)}%"></i><span>${n}</span></div>`).join('')}
-    <h3 style="margin-top:18px">Die meistgeliebten Spezialitäten</h3>${dishes.map(x => `<div class="dish"><span>${esc(x.d.n)}<br><span class="hint">${esc(x.e.name)}, ${esc(x.e.city)}</span></span>${avs(x.d.w || [])}</div>`).join('') || '<p class="empty">Noch keine Spezialitäten eingetragen.</p>'}`}`;
+    <h3>Wer war wo dabei</h3>${per.map(([p, n]) => `<button class="bar" data-act="showperson" data-k="${p.k}"><span>${av(p.k)} ${esc(p.n)}</span><i style="width:${Math.round(n / maxP * 100)}%;background:${p.c}"></i><span>${n}</span></button>`).join('')}
+    <h3 style="margin-top:18px">Länder</h3>${Object.entries(countries).sort((a, b) => b[1] - a[1]).map(([c, n]) => `<button class="bar" data-act="fcountry" data-c="${esc(c)}"><span>${flag(c)} ${esc(cName(c))}</span><i style="width:${Math.round(n / maxC * 100)}%"></i><span>${n}</span></button>`).join('')}
+    <h3 style="margin-top:18px" id="rbDishes">Die meistgeliebten Spezialitäten</h3>${dishes.map(x => `<div class="dish"><span>${esc(x.d.n)}<br><span class="hint">${esc(x.e.name)}, ${esc(x.e.city)}</span></span>${avs(x.d.w || [])}</div>`).join('') || '<p class="empty">Noch keine Spezialitäten eingetragen.</p>'}`}`;
   hydrate($('#v-rueckblick'));
 }
 
@@ -824,6 +843,15 @@ document.addEventListener('click', async ev => {
   else if (a === 'fperson') { const k = b.dataset.k, p = S.f.people; S.f.people = p.includes(k) ? p.filter(x => x !== k) : [...p, k]; rerenderFilters(); }
   else if (a === 'fdog') { S.f.dog = !S.f.dog; rerenderFilters(); }
   else if (a === 'fstamm') { S.f.stamm = !S.f.stamm; rerenderFilters(); }
+  else if (a === 'fcountryoff') { S.f.country = ''; rerenderFilters(); }
+  else if (a === 'fcountry') showList({country: b.dataset.c});
+  else if (a === 'showperson') showList({people: [b.dataset.k]});
+  else if (a === 'showLaender') { $('#sheet').hidden = true; S.mapMode = 'laender'; go('karte'); }
+  else if (a === 'stat') { const k = b.dataset.k;
+    if (k === 'laender') openCountries();
+    else if (k === 'orte') showList({});
+    else if (k === 'events') showList({group: 'event'});
+    else if (k === 'dishes') { const h = $('#rbDishes'); if (h) h.scrollIntoView({behavior: 'smooth', block: 'start'}); } }
   else if (a === 'fgroup') { S.f.group = b.dataset.g; rerenderFilters(); }
   else if (a === 'ftrip') { S.f.trip = ''; rerenderFilters(); }
   else if (a === 'mapmode') { S.mapMode = b.dataset.m; renderKarte(); }
@@ -840,7 +868,7 @@ document.addEventListener('click', async ev => {
   else if (a === 'closeSheet') $('#sheet').hidden = true;
   else if (a === 'nativeShare') { try { await navigator.share({text: shareText()}); } catch (x) {} }
   else if (a === 'copy') { const txt = shareText(); try { await navigator.clipboard.writeText(txt); toast('Text kopiert'); } catch (x) { toast('Kopieren ging nicht – bitte den Text markieren.'); } }
-  else if (a === 'tripList') { S.f = {people: [], dog: false, stamm: false, group: '', trip: b.dataset.id}; S.q = ''; go('liste'); }
+  else if (a === 'tripList') { S.f = {...emptyF(), trip: b.dataset.id}; S.q = ''; go('liste'); }
   else if (a === 'tripAdd') go('neu', {trip: b.dataset.id});
   else if (a === 'book') { S.buch = b.dataset.id; go('buch'); }
   else if (a === 'print') printBook();
